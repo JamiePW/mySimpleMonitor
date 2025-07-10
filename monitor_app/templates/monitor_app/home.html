@@ -1,0 +1,191 @@
+<!-- monitor_app/templates/monitor_app/home.html -->
+<!DOCTYPE html>
+{% load static %}
+
+<link rel="stylesheet" href="{% static 'monitor_app/home_style.css' %}">
+
+<html>
+<head>
+    <title>系统监控概览</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f7fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+        }
+        .status-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .status-card {
+            background: rgba(255, 255, 255, 0.3); /* 半透明白色背景 */
+            backdrop-filter: blur(5px); /* 毛玻璃效果 */
+            border: 1px solid rgba(255, 255, 255, 0.3); /* 半透明边框 */
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+            transition: transform 0.3s ease;
+        }
+        .status-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            background: rgba(255, 255, 255, 0.85); /* 悬停时稍微增加不透明度 */
+        }
+        .status-card.good {
+            border-top: 4px solid #4CAF50;
+        }
+        .status-card.warning {
+            border-top: 4px solid #FFC107;
+        }
+        .status-card.critical {
+            border-top: 4px solid #F44336;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #333;
+        }
+        .status-indicator {
+            font-size: 0.9rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            color: white;
+        }
+        .status-good {
+            background: #4CAF50;
+        }
+        .status-warning {
+            background: #FFC107;
+        }
+        .status-critical {
+            background: #F44336;
+        }
+        .card-content {
+            margin-top: 10px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #2196F3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 15px;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #0b7dda;
+        }
+        .last-updated {
+            text-align: right;
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>xx公司系统监控概览</h1>
+            <div>
+                <span>最后更新时间: {{ timestamp }}</span>
+            </div>
+        </div>
+        
+        <div class="status-cards">
+            <!-- 服务器状态卡片 -->
+            <div class="status-card {% if status_summary.hosts.issues == 0 %}good{% else %}critical{% endif %}">
+                <div class="card-header">
+                    <div class="card-title">物理服务器状态</div>
+                    <div class="status-indicator {% if status_summary.hosts.issues == 0 %}status-good{% else %}status-critical{% endif %}">
+                        {% if status_summary.hosts.issues == 0 %}
+                            正常
+                        {% else %}
+                            {{ status_summary.hosts.issues }}台异常
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-content">
+                    <p>监控中的服务器: {{ status_summary.hosts.total }}台</p>
+                    {% if status_summary.hosts.issues > 0 %}
+                        <p class="warning">⚠️ {{ status_summary.hosts.issues }}台服务器状态异常</p>
+                    {% else %}
+                        <p>所有服务器运行正常</p>
+                    {% endif %}
+                    <a href="{% url 'dashboard' %}#hosts-section" class="btn">查看详情</a>
+                </div>
+            </div>
+            
+            <!-- 虚拟机状态卡片 -->
+            <div class="status-card {% if status_summary.vms.issues == 0 %}good{% else %}critical{% endif %}">
+                <div class="card-header">
+                    <div class="card-title">虚拟机状态</div>
+                    <div class="status-indicator {% if status_summary.vms.issues == 0 %}status-good{% else %}status-critical{% endif %}">
+                        {% if status_summary.vms.issues == 0 %}
+                            正常
+                        {% else %}
+                            {{ status_summary.vms.issues }}台异常
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-content">
+                    <p>监控中的虚拟机: {{ status_summary.vms.total }}台</p>
+                    {% if status_summary.vms.issues > 0 %}
+                        <p class="warning">⚠️ {{ status_summary.vms.issues }}台虚拟机状态异常</p>
+                    {% else %}
+                        <p>所有虚拟机运行正常</p>
+                    {% endif %}
+                    <a href="{% url 'dashboard' %}#vms-section" class="btn">查看详情</a>
+                </div>
+            </div>
+            
+            <!-- 打印机状态卡片 -->
+            <div class="status-card {% if status_summary.printers.issues == 0 %}good{% else %}warning{% endif %}">
+                <div class="card-header">
+                    <div class="card-title">打印机状态</div>
+                    <div class="status-indicator {% if status_summary.printers.issues == 0 %}status-good{% else %}status-warning{% endif %}">
+                        {% if status_summary.printers.issues == 0 %}
+                            正常
+                        {% else %}
+                            {{ status_summary.printers.issues }}台需关注
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-content">
+                    <p>监控中的打印机: {{ status_summary.printers.total }}台</p>
+                    {% if status_summary.printers.issues > 0 %}
+                        <p class="warning">⚠️ {{ status_summary.printers.issues }}台打印机墨粉不足或状态异常</p>
+                    {% else %}
+                        <p>所有打印机状态正常</p>
+                    {% endif %}
+                    <a href="{% url 'dashboard' %}#printers-section" class="btn">查看详情</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="last-updated">
+            最后更新: {{ timestamp }}
+        </div>
+    </div>
+</body>
+</html>

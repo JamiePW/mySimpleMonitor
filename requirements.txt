@@ -1,0 +1,5 @@
+django
+pyvmomi
+easysnmp
+django-apscheduler
+daphne

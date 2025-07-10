@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+
+{% load static %}
+
+<link rel="stylesheet" href="{% static 'monitor_app/style.css' %}">
+
+<html>
+<head>
+    <title>系统监控面板</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+        }
+        .card { 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+            padding: 0; /* 修改为0，内边距由折叠组件控制 */
+            margin-bottom: 20px; 
+            background: rgba(255, 255, 255, 0.8); /* 增加不透明度 */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* 添加轻微阴影提升层次感 */
+        }
+        .section-title { 
+            background-color: #f5f5f5; 
+            padding: 10px; 
+            margin-top: 0; 
+            cursor: pointer; /* 添加手型光标表示可点击 */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-title:after {
+            content: "−"; /* 折叠状态符号 */
+            font-size: 1.2em;
+        }
+        .collapsed .section-title:after {
+            content: "+"; /* 展开状态符号 */
+        }
+        .card-content {
+            padding: 15px;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+        }
+        th, td { 
+            padding: 8px; 
+            text-align: left; 
+            border-bottom: 1px solid #ddd; 
+        }
+        tr:hover { 
+            background-color: #f5f5f5; 
+        }
+        .status-active { 
+            color: green; 
+            font-weight: bold;
+        }
+        .status-inactive { 
+            color: red; 
+            font-weight: bold;
+        }
+        .disk-space {
+            font-weight: normal;
+            color: #555;
+        }
+    </style>
+    <script>
+        // 简单的折叠功能实现
+        function toggleCollapse(element) {
+            const card = element.closest('.card');
+            const content = card.querySelector('.card-content');
+            card.classList.toggle('collapsed');
+            content.style.display = card.classList.contains('collapsed') ? 'none' : 'block';
+        }
+        
+        // 页面加载时设置折叠状态
+        document.addEventListener('DOMContentLoaded', function() {
+            // 默认展开所有卡片
+            document.querySelectorAll('.card').forEach(card => {
+                card.classList.remove('collapsed');
+                card.querySelector('.card-content').style.display = 'block';
+            });
+        });
+    </script>
+</head>
+<body>
+    <div style="position: fixed; top: 10px; left: 10px; z-index: 1000;">
+        <a href="{% url 'home' %}" style="padding: 5px 10px; background: #eee; border: 1px solid #ccc; text-decoration: none; color: #333;">
+            ← 返回概览
+        </a>
+    </div>
+
+    <div style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
+        <button id="refresh-btn" style="padding: 5px 10px;">手动刷新</button>
+        <span id="loading-indicator" style="display: none; margin-left: 10px;">
+            <span style="color: #007bff;">⏳ 更新数据中...</span>
+        </span>
+        <span id="timestamp">最后更新时间: {{ timestamp }}</span>
+    </div>
+
+    <h1>xx公司系统监控面板</h1>
+    <!-- <p>最后刷新时间: {{ timestamp }}</p> -->
+    
+    <!-- 服务器主机信息 -->
+    <div class="card" id="hosts-section">
+        <div class="section-title" onclick="toggleCollapse(this)">
+            <h2>物理服务器状态</h2>
+        </div>
+        <div class="card-content" id="hosts-container">
+            {% for host in hosts %}
+                <h3>{{ host.host_name }}</h3>
+                <table>
+                    <tr>
+                        <th>基本指标</th>
+                        <th>值</th>
+                    </tr>
+                    <tr>
+                        <td>服务器名称</td>
+                        <td>{{ host.host_name }}</td>
+                    </tr>
+                    <tr>
+                        <td>电源状态</td>
+                        <td class="{% if host.power_state == 'poweredOn' %}status-active{% else %}status-inactive{% endif %}">
+                            {{ host.power_state }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>CPU使用率</td>
+                        <td>{{ host.cpu_usage }}</td>
+                    </tr>
+                    <tr>
+                        <td>内存使用（MB）</td>
+                        <td>{{ host.memory_usage }} ({{ host.memory_percent }})</td>
+                    </tr>
+                </table>
+                
+                <!-- GPU信息 -->
+                {% if host.gpus %}
+                    <h4>GPU状态</h4>
+                    <table>
+                        <tr>
+                            <th>设备名称</th>
+                            <th>设备ID</th>
+                            <th>显存</th>
+                            <th>温度</th>
+                        </tr>
+                        {% for gpu in host.gpus %}
+                        <tr>
+                            <td>{{ gpu.name }}</td>
+                            <td>{{ gpu.deviceid }}</td>
+                            <td>{{ gpu.memory }}MB / {{ gpu.memory_usage }}MB</td>
+                            <td>{{ gpu.temperature }}°C</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                {% else %}
+                    <p>未检测到GPU设备</p>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- 虚拟机信息部分 -->
+    <div class="card" id="vms-section">
+        <div class="section-title" onclick="toggleCollapse(this)">
+            <h2>虚拟机状态</h2>
+        </div>
+        <div class="card-content">
+            <table>
+                <thead>
+                    <tr>
+                        <th>虚拟机名称</th>
+                        <th>所属主机</th>
+                        <th>状态</th>
+                        <th>IP地址</th>
+                        <th>CPU使用率</th>
+                        <th>磁盘空间</th>
+                    </tr>
+                </thead>
+                <tbody id="vms-container">
+                    {% for vm in vms %}
+                    <tr>
+                        <td>{{ vm.name }}</td>
+                        <td>{{ vm.host }}</td>
+                        <td class="{% if vm.power_state == 'poweredOn' %}status-active{% else %}status-inactive{% endif %}">
+                            {{ vm.power_state }}
+                        </td>
+                        <td>{{ vm.ip_address }}</td>
+                        <td>{{ vm.cpu_usage }}</td>
+                        <td>
+                            {% for disk in vm.disks %}
+                            <div>
+                                {{ disk.path }}: 
+                                <span class="disk-space">
+                                    {{ disk.free_space|floatformat:1 }}GB / 
+                                    {{ disk.total_space|floatformat:1 }}GB
+                                    ({% widthratio disk.free_space disk.total_space 100 as free_percent %}
+                                    {{ free_percent }}% free)
+                                </span>
+                            </div>
+                            {% empty %}
+                            无磁盘信息
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- 打印机信息 -->
+    <div class="card" id="printers-section">
+        <div class="section-title", onclick="toggleCollapse(this)">
+            <h2>xx打印机状态</h2>
+        </div>
+        <div class="card-content" id="printer-container-1">
+            <table>
+                <tr>
+                    <td>状态</td>
+                    <td>{{ printer1.status }}</td>
+                </tr>
+                <tr>
+                    <td>总打印页数</td>
+                    <td>{{ printer1.total_pages }}</td>
+                </tr>
+                <tr>
+                    <td>黑色墨粉</td>
+                    <td>{{ printer1.black_toner }}%</td>
+                </tr>
+                <tr>
+                    <td>青色墨粉</td>
+                    <td>{{ printer1.cyan_toner }}%</td>
+                </tr>
+                <tr>
+                    <td>洋红墨粉</td>
+                    <td>{{ printer1.magenta_toner }}%</td>
+                </tr>
+                <tr>
+                    <td>黄色墨粉</td>
+                    <td>{{ printer1.yellow_toner }}%</td>
+                </tr>
+                <!-- <tr>
+                    <td>纸张状态</td>
+                    <td>{{ printer1.paper_status }}</td>
+                </tr> -->
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title" onclick="toggleCollapse(this)">
+            <h2>xx打印机状态</h2>
+        </div>
+        <div class="card-content" id="printer-container-2">
+            <table>
+                <tr>
+                    <td>状态</td>
+                    <td>{{ printer2.status }}</td>
+                </tr>
+                <tr>
+                    <td>总打印页数</td>
+                    <td>{{ printer2.total_pages }}</td>
+                </tr>
+                <tr>
+                    <td>黑色墨粉</td>
+                    <td>{{ printer2.black_toner }}%</td>
+                </tr>
+                <tr>
+                    <td>青色墨粉</td>
+                    <td>{{ printer2.cyan_toner }}%</td>
+                </tr>
+                <tr>
+                    <td>洋红墨粉</td>
+                    <td>{{ printer2.magenta_toner }}%</td>
+                </tr>
+                <tr>
+                    <td>黄色墨粉</td>
+                    <td>{{ printer2.yellow_toner }}%</td>
+                </tr>
+                <!-- <tr>
+                    <td>纸张状态</td>
+                    <td>{{ printer2.paper_status }}</td>
+                </tr> -->
+            </table>
+        </div>
+    </div>
+
+    <!-- 在body底部添加 -->
+    <script>
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始加载数据
+        fetchData();
+
+        // 每60秒更新一次数据
+        setInterval(fetchData, 60000);
+        
+        // 添加手动刷新按钮
+        document.getElementById('refresh-btn').addEventListener('click', fetchData);
+    });
+
+    function fetchData() {
+        // 显示加载指示器
+        document.getElementById('loading-indicator').style.display = 'block';
+        
+        fetch('/dashboard-data/')
+            .then(response => response.json())
+            .then(data => {
+                updateDashboard(data);
+                // 更新最后更新时间
+                document.getElementById('timestamp').textContent = 
+                    `最后更新时间: ${data.timestamp}`;
+                // 隐藏加载指示器
+                document.getElementById('loading-indicator').style.display = 'none';
+            })
+            .catch(error => {
+                console.error('获取数据失败:', error);
+                document.getElementById('loading-indicator').style.display = 'none';
+                document.getElementById('timestamp').textContent = 
+                    '最后更新时间: 获取数据失败 - ' + new Date().toLocaleTimeString();
+            });
+    }
+
+    function updateDashboard(data) {
+        // 更新服务器主机信息
+        updateHosts(data.hosts);
+        
+        // 更新虚拟机信息
+        updateVMs(data.vms);
+
+        // 更新打印机信息
+        updatePrinter(data.printer1, data.printer2);
+    }
+
+    // 具体的DOM更新函数（需要根据你的页面结构实现）
+    function updateHosts(hosts) {
+        // 实现更新主机部分的DOM
+        const container = document.getElementById('hosts-container');
+        container.innerHTML = ''; // 清空当前内容
+
+        let html = '<p>这是实时更新的物理主机数据。</p>';
+        hosts.forEach(host => {
+            html += `
+                <h3>${host.host_name}</h3>
+                <table>
+                    <tr>
+                        <th>基本指标</th>
+                        <th>值</th>
+                    </tr>
+                    <tr>
+                        <td>服务器名称</td>
+                        <td>${host.host_name}</td>
+                    </tr>
+                    <tr>
+                        <td>电源状态</td>
+                        <td class="${host.power_state === 'poweredOn' ? 'status-active' : 'status-inactive'}">
+                            ${host.power_state}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>CPU使用率</td>
+                        <td>${host.cpu_usage}</td>
+                    </tr>
+                    <tr>
+                        <td>内存使用（MB）</td>
+                        <td>${host.memory_usage} (${host.memory_percent})</td>
+                    </tr>
+                </table>`;
+            
+            // GPU信息
+            if (host.gpus && host.gpus.length > 0) {
+                html += '<h4>GPU状态</h4><table>';
+                html += '<tr><th>设备名称</th><th>设备ID</th><th>显存</th><th>温度</th></tr>';
+                host.gpus.forEach(gpu => {
+                    html += `
+                        <tr>
+                            <td>${gpu.name}</td>
+                            <td>${gpu.deviceid}</td>
+                            <td>${gpu.memory}MB / ${gpu.memory_usage}MB</td>
+                            <td>${gpu.temperature}°C</td>
+                        </tr>`;
+                });
+                html += '</table>';
+            } else {
+                html += '<p>未检测到GPU设备</p>';
+            }
+        });
+        container.insertAdjacentHTML('beforeend', html);
+    }
+
+    function updateVMs(vms) {
+        // 实现更新虚拟机部分的DOM
+        const container = document.getElementById('vms-container');
+        container.innerHTML = ''; // 清空当前内容
+        
+        let vmHTML = '<p>这是实时更新的虚拟机数据。</p>';
+        vms.forEach(vm => {
+            // 状态CSS类
+            const statusClass = vm.power_state === 'poweredOn' 
+                ? 'status-active' : 'status-inactive';
+            
+            // 生成磁盘HTML
+            let disksHtml = '无磁盘信息';
+            if (vm.disks && vm.disks.length > 0) {
+                disksHtml = vm.disks.map(disk => {
+                    const freePercent = ((disk.free_space / disk.total_space) * 100).toFixed(1);
+                    return `
+                        <div>
+                            ${disk.path}: 
+                            <span class="disk-space">
+                                ${disk.free_space.toFixed(1)}GB / ${disk.total_space.toFixed(1)}GB
+                                (${freePercent}% free)
+                            </span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // 单行VM的HTML
+            vmHTML += `
+                <tr>
+                    <td>${vm.name}</td>
+                    <td>${vm.host}</td>
+                    <td class="${statusClass}">${vm.power_state}</td>
+                    <td>${vm.ip_address}</td>
+                    <td>${vm.cpu_usage}</td>
+                    <td>${disksHtml}</td>
+                </tr>
+            `;
+        });
+        container.insertAdjacentHTML('beforeend', vmHTML);
+    }
+
+    function updatePrinter(printer1, printer2) {
+        // 实现更新打印机部分的DOM
+        const container1 = document.getElementById('printer-container-1');
+        container1.innerHTML = '';   // 清空当前内容
+        const container2 = document.getElementById('printer-container-2');
+        container2.innerHTML = '';   // 清空当前内容
+
+        const printer1HTML = `
+        <table>
+            <p>这是实时更新的一号打印机数据。</p>
+            <tr>
+                <td>状态</td>
+                <td>${ printer1.status }</td>
+            </tr>
+            <tr>
+                <td>总打印页数</td>
+                <td>${ printer1.total_pages }</td>
+            </tr>
+            <tr>
+                <td>黑色墨粉</td>
+                <td>${ printer1.black_toner }%</td>
+            </tr>
+            <tr>
+                <td>青色墨粉</td>
+                <td>${ printer1.cyan_toner }%</td>
+            </tr>
+            <tr>
+                <td>洋红墨粉</td>
+                <td>${ printer1.magenta_toner }%</td>
+            </tr>
+            <tr>
+                <td>黄色墨粉</td>
+                <td>${ printer1.yellow_toner }%</td>
+            </tr>
+        </table>
+        `;
+        container1.insertAdjacentHTML('beforeend', printer1HTML);
+
+        const printer2HTML = `
+        <table>
+            <p>这是实时更新的二号打印机数据。</p>
+            <tr>
+                <td>状态</td>
+                <td>${ printer2.status }</td>
+            </tr>
+            <tr>
+                <td>总打印页数</td>
+                <td>${ printer2.total_pages }</td>
+            </tr>
+            <tr>
+                <td>黑色墨粉</td>
+                <td>${ printer2.black_toner }%</td>
+            </tr>
+            <tr>
+                <td>青色墨粉</td>
+                <td>${ printer2.cyan_toner }%</td>
+            </tr>
+            <tr>
+                <td>洋红墨粉</td>
+                <td>${ printer2.magenta_toner }%</td>
+            </tr>
+            <tr>
+                <td>黄色墨粉</td>
+                <td>${ printer2.yellow_toner }%</td>
+            </tr>
+        </table>
+        `;
+        container2.insertAdjacentHTML('beforeend', printer2HTML)
+    }
+    </script>
+</body>
+</html>
