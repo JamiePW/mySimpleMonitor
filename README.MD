@@ -1,6 +1,7 @@
 # SimpleMonitor1
 
-一个基于django框架的轻量级后台监控系统
+一个基于django框架的轻量级后台监控系统  
+A lightweight background monitoring system based on Django framework  
 
 ### 功能简介
 
